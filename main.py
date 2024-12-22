@@ -1,26 +1,47 @@
+import sqlite3
 import pygame
 import sys
 import random
 
 pygame.init()
+
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
 FPS = 60
+GRID_SIZE = 8
+CELL_SIZE = 50
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-pygame.display.set_caption("Block Company")
+pygame.display.set_caption("Block Blast")
+DB_NAME = 'Save.sqlite'
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
-RED = (255, 0, 0)
 BLUE = (0, 123, 255)
 ORANGE = (255, 165, 0)
 GREEN = (0, 200, 150)
 DARK_BLUE = (10, 10, 80)
-LIGHT_BLUE = (48, 163, 230)
+LIGHT_BLUE = (173, 216, 230)
+GRAY = (200, 200, 200)
 
 font_large = pygame.font.Font(None, 80)
 font_medium = pygame.font.Font(None, 50)
 font_small = pygame.font.Font(None, 30)
+
+def initialize_database():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS grid (
+        id INTEGER PRIMARY KEY,
+        x INTEGER,
+        y INTEGER,
+        value INTEGER
+    )
+    """)
+    conn.commit()
+    conn.close()
+
+initialize_database()
 
 
 class Button:
@@ -87,18 +108,211 @@ def draw_gradient_background(screen, top_color, bottom_color):
         pygame.draw.line(screen, color, (0, y), (SCREEN_WIDTH, y))
 
 
-def main():
+class Grid:
+    def __init__(self):
+        self.grid = [[0 for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+        self.load_from_database()
+        self.score = 0
+
+    def draw(self):
+        for row in range(GRID_SIZE):
+            for col in range(GRID_SIZE):
+                color = GRAY if self.grid[row][col] == 0 else BLUE
+                rect = pygame.Rect(100 + col * CELL_SIZE, 100 + row * CELL_SIZE, CELL_SIZE, CELL_SIZE)
+                pygame.draw.rect(screen, color, rect)
+                pygame.draw.rect(screen, WHITE, rect, 1)
+
+        score_surface = font_medium.render(f"{self.score}", True, WHITE)
+        screen.blit(score_surface, (280, 50))
+
+    def can_place(self, shape, x, y):
+        for r, row in enumerate(shape):
+            for c, cell in enumerate(row):
+                if cell:
+                    grid_x = x + c
+                    grid_y = y + r
+                    if grid_x >= GRID_SIZE or grid_y >= GRID_SIZE or grid_x < 0 or grid_y < 0 or self.grid[grid_y][grid_x] != 0:
+                        return False
+        return True
+
+    def place(self, shape, x, y):
+        for r, row in enumerate(shape):
+            for c, cell in enumerate(row):
+                if cell:
+                    self.grid[y + r][x + c] = 1
+        self.check_lines()
+        self.save_to_database()
+
+    def check_lines(self):
+        full_rows = [r for r in range(GRID_SIZE) if all(self.grid[r])]
+        full_cols = [c for c in range(GRID_SIZE) if all(self.grid[r][c] for r in range(GRID_SIZE))]
+
+        for r in full_rows:
+            for c in range(GRID_SIZE):
+                self.grid[r][c] = 0
+            self.score += 10 * GRID_SIZE
+
+        for c in full_cols:
+            for r in range(GRID_SIZE):
+                self.grid[r][c] = 0
+            self.score += 10 * GRID_SIZE
+
+    def save_to_database(self):
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM grid")
+        for y, row in enumerate(self.grid):
+            for x, value in enumerate(row):
+                cursor.execute("INSERT INTO grid (x, y, value) VALUES (?, ?, ?)", (x, y, value))
+        conn.commit()
+        conn.close()
+
+    def load_from_database(self):
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute("SELECT x, y, value FROM grid")
+        data = cursor.fetchall()
+        for x, y, value in data:
+            self.grid[y][x] = value
+        conn.close()
+
+    def has_moves(self, shapes):
+        for shape in shapes:
+            for y in range(GRID_SIZE):
+                for x in range(GRID_SIZE):
+                    if self.can_place(shape.shape, x, y):
+                        return True
+        return False
+
+    def reset(self):
+        self.grid = [[0 for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+        self.score = 0
+        self.save_to_database()
+
+SHAPES = [
+    [[1, 1], [1, 1]],  # Квадрат
+    [[1, 1, 1]],  # Линия горизонтальная
+    [[1], [1], [1]],  # Линия вертикальная
+    [[1, 1, 0], [0, 1, 1]],  # Z-образная
+    [[0, 1, 1], [1, 1, 0]],  # Обратная Z-образная
+    [[1, 1, 1], [0, 1, 0]],  # T-образная
+]
+
+
+class Shape:
+    def __init__(self, shape):
+        self.shape = shape
+        self.width = len(shape[0]) * CELL_SIZE
+        self.height = len(shape) * CELL_SIZE
+        self.rect = pygame.Rect(0, 0, self.width, self.height)
+        self.initial_position = None
+
+    def set_initial_position(self, position):
+        self.initial_position = position
+        self.rect.topleft = position
+
+    def reset_to_initial_position(self):
+        if self.initial_position:
+            self.rect.topleft = self.initial_position
+
+    def draw(self, screen):
+        for r, row in enumerate(self.shape):
+            for c, cell in enumerate(row):
+                if cell:
+                    pygame.draw.rect(screen, ORANGE,
+                                     (self.rect.x + c * CELL_SIZE, self.rect.y + r * CELL_SIZE, CELL_SIZE, CELL_SIZE))
+                    pygame.draw.rect(screen, WHITE,
+                                     (self.rect.x + c * CELL_SIZE, self.rect.y + r * CELL_SIZE, CELL_SIZE, CELL_SIZE),
+                                     1)
+
+
+def play_classic():
     clock = pygame.time.Clock()
-    while True:
+    grid = Grid()
+
+    # Инициализация фигур
+    shapes = [Shape(random.choice(SHAPES)) for _ in range(3)]
+    positions = [(600, 95), (600, 250), (600, 405)]
+    random.shuffle(positions)
+    for i, shape in enumerate(shapes):
+        shape.rect.topleft = positions[i]
+        shape.set_initial_position(positions[i])
+
+    dragging_shape = None
+    offset_x = 0
+    offset_y = 0
+
+    running = True
+    while running:
         clock.tick(FPS)
         draw_gradient_background(screen, DARK_BLUE, LIGHT_BLUE)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                grid.save_to_database()
+                pygame.quit()
+                sys.exit()
+
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                for shape in shapes:
+                    if shape.rect.collidepoint(event.pos):
+                        dragging_shape = shape
+                        offset_x = shape.rect.x - event.pos[0]
+                        offset_y = shape.rect.y - event.pos[1]
+                        break
+
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if dragging_shape:
+                    grid_x = (dragging_shape.rect.x - 100 + CELL_SIZE // 2) // CELL_SIZE
+                    grid_y = (dragging_shape.rect.y - 100 + CELL_SIZE // 2) // CELL_SIZE
+
+                    if grid.can_place(dragging_shape.shape, grid_x, grid_y):
+                        grid.place(dragging_shape.shape, grid_x, grid_y)
+                        shapes.remove(dragging_shape)
+
+                        if not shapes:
+                            shapes = [Shape(random.choice(SHAPES)) for _ in range(3)]
+                            random.shuffle(positions)
+                            for i, shape in enumerate(shapes):
+                                shape.rect.topleft = positions[i]
+
+                        if not grid.has_moves(shapes):
+                            grid.reset()
+                            shapes = [Shape(random.choice(SHAPES)) for _ in range(3)]
+                            random.shuffle(positions)
+                            for i, shape in enumerate(shapes):
+                                shape.set_initial_position(positions[i])
+                    else:
+                        dragging_shape.reset_to_initial_position()
+
+                    dragging_shape = None
+
+            elif event.type == pygame.MOUSEMOTION:
+                if dragging_shape:
+                    dragging_shape.rect.x = event.pos[0] + offset_x
+                    dragging_shape.rect.y = event.pos[1] + offset_y
+
+        grid.draw()
+
+        for shape in shapes:
+            shape.draw(screen)
+
+        pygame.display.flip()
+
+
+def main():
+    clock = pygame.time.Clock()
+
+    while True:
+        clock.tick(FPS)
+        draw_gradient_background(screen, DARK_BLUE, LIGHT_BLUE)  # Градиентный фон
 
         for snowflake in snowflakes:
             snowflake.fall()
             snowflake.draw(screen)
 
-        title_surface = font_large.render("BLOCK COMP", True, RED)
-        subtitle_surface = font_small.render("Gobziii", True, WHITE)
+        title_surface = font_large.render("BLOCK BLAST", True, WHITE)
+        subtitle_surface = font_small.render("ADVENTURE MASTER", True, WHITE)
         screen.blit(title_surface, title_surface.get_rect(center=(SCREEN_WIDTH // 2, 150)))
         screen.blit(subtitle_surface, subtitle_surface.get_rect(center=(SCREEN_WIDTH // 2, 200)))
 
@@ -116,7 +330,8 @@ def main():
                 if button.text == "Adventure":
                     print("Start Adventure mode")
                 elif button.text == "Classic":
-                    print("Start Classic mode")
+                    play_classic()
+
         pygame.display.flip()
 
 
