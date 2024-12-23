@@ -30,6 +30,7 @@ font_small = pygame.font.Font(None, 30)
 def initialize_database():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
+
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS grid (
         id INTEGER PRIMARY KEY,
@@ -38,6 +39,19 @@ def initialize_database():
         value INTEGER
     )
     """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS scores (
+        id INTEGER PRIMARY KEY,
+        current_score INTEGER DEFAULT 0,
+        high_score INTEGER DEFAULT 0
+    )
+    """)
+
+    cursor.execute("SELECT COUNT(*) FROM scores")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("INSERT INTO scores (current_score, high_score) VALUES (0, 0)")
+
     conn.commit()
     conn.close()
 
@@ -112,7 +126,7 @@ class Grid:
     def __init__(self):
         self.grid = [[0 for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
         self.load_from_database()
-        self.score = 0
+        self.score, self.high_score = self.load_scores()
 
     def draw(self):
         for row in range(GRID_SIZE):
@@ -122,8 +136,10 @@ class Grid:
                 pygame.draw.rect(screen, color, rect)
                 pygame.draw.rect(screen, WHITE, rect, 1)
 
-        score_surface = font_medium.render(f"{self.score}", True, WHITE)
-        screen.blit(score_surface, (280, 50))
+        score_surface = font_medium.render(f"Score: {self.score}", True, WHITE)
+        high_score_surface = font_medium.render(f"High Score: {self.high_score}", True, WHITE)
+        screen.blit(score_surface, (10, 10))
+        screen.blit(high_score_surface, (10, 50))
 
     def can_place(self, shape, x, y):
         for r, row in enumerate(shape):
@@ -157,6 +173,8 @@ class Grid:
                 self.grid[r][c] = 0
             self.score += 10 * GRID_SIZE
 
+        self.update_scores()
+
     def save_to_database(self):
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
@@ -188,6 +206,27 @@ class Grid:
         self.grid = [[0 for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
         self.score = 0
         self.save_to_database()
+        self.update_scores(reset=True)
+
+    def load_scores(self):
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute("SELECT current_score, high_score FROM scores")
+        current_score, high_score = cursor.fetchone()
+        conn.close()
+        return current_score, high_score
+
+    def update_scores(self, reset=False):
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        if reset:
+            self.score = 0
+        cursor.execute("UPDATE scores SET current_score = ?", (self.score,))
+        if self.score > self.high_score:
+            self.high_score = self.score
+            cursor.execute("UPDATE scores SET high_score = ?", (self.high_score,))
+        conn.commit()
+        conn.close()
 
 SHAPES = [
     [[1, 1], [1, 1]],  # Квадрат
