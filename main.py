@@ -31,8 +31,9 @@ def initialize_database():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
+    # Таблица для игрового поля Classic
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS grid (
+    CREATE TABLE IF NOT EXISTS classic_grid (
         id INTEGER PRIMARY KEY,
         x INTEGER,
         y INTEGER,
@@ -40,6 +41,17 @@ def initialize_database():
     )
     """)
 
+    # Таблица для игрового поля Adventure
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS adventure_grid (
+        id INTEGER PRIMARY KEY,
+        x INTEGER,
+        y INTEGER,
+        value INTEGER
+    )
+    """)
+
+    # Таблица для текущего счета и рекорда
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS scores (
         id INTEGER PRIMARY KEY,
@@ -48,9 +60,15 @@ def initialize_database():
     )
     """)
 
-    cursor.execute("SELECT COUNT(*) FROM scores")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("INSERT INTO scores (current_score, high_score) VALUES (0, 0)")
+    # Таблица для уровней Adventure
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS levels (
+        id INTEGER PRIMARY KEY,
+        level_number INTEGER,
+        required_score INTEGER,
+        unlocked INTEGER DEFAULT 0
+    )
+    """)
 
     conn.commit()
     conn.close()
@@ -123,8 +141,12 @@ def draw_gradient_background(screen, top_color, bottom_color):
 
 
 class Grid:
-    def __init__(self):
+    def __init__(self, obstacles=None, mode="classic"):
         self.grid = [[0 for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+        self.mode = mode  # Режим игры: classic или adventure
+        if obstacles:
+            for x, y in obstacles:
+                self.grid[y][x] = 1
         self.load_from_database()
         self.score, self.high_score = self.load_scores()
 
@@ -176,19 +198,23 @@ class Grid:
         self.update_scores()
 
     def save_to_database(self):
+        """Сохраняет текущее состояние сетки в базу данных."""
+        table_name = f"{self.mode}_grid"
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM grid")
+        cursor.execute(f"DELETE FROM {table_name}")
         for y, row in enumerate(self.grid):
             for x, value in enumerate(row):
-                cursor.execute("INSERT INTO grid (x, y, value) VALUES (?, ?, ?)", (x, y, value))
+                cursor.execute(f"INSERT INTO {table_name} (x, y, value) VALUES (?, ?, ?)", (x, y, value))
         conn.commit()
         conn.close()
 
     def load_from_database(self):
+        """Загружает состояние сетки из базы данных."""
+        table_name = f"{self.mode}_grid"
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
-        cursor.execute("SELECT x, y, value FROM grid")
+        cursor.execute(f"SELECT x, y, value FROM {table_name}")
         data = cursor.fetchall()
         for x, y, value in data:
             self.grid[y][x] = value
@@ -212,9 +238,14 @@ class Grid:
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
         cursor.execute("SELECT current_score, high_score FROM scores")
-        current_score, high_score = cursor.fetchone()
+        result = cursor.fetchone()
+        if result is None:
+            # Если данных нет, создаём начальную запись
+            cursor.execute("INSERT INTO scores (current_score, high_score) VALUES (0, 0)")
+            conn.commit()
+            result = (0, 0)
         conn.close()
-        return current_score, high_score
+        return result  # Возвращаем текущий счёт и рекорд
 
     def update_scores(self, reset=False):
         conn = sqlite3.connect(DB_NAME)
@@ -227,6 +258,121 @@ class Grid:
             cursor.execute("UPDATE scores SET high_score = ?", (self.high_score,))
         conn.commit()
         conn.close()
+
+
+def generate_level_data():
+    levels = []
+    for level_number in range(1, 11):
+        required_score = level_number * 200
+        num_obstacles = level_number * 4
+        obstacles = []
+        while len(obstacles) < num_obstacles:
+            x, y = random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1)
+            if (x, y) not in obstacles:
+                obstacles.append((x, y))
+        levels.append({"level_number": level_number, "required_score": required_score, "obstacles": obstacles})
+    return levels
+
+
+class Adventure:
+    def __init__(self):
+        self.current_level = 1
+        self.levels = self.load_levels()
+
+    def load_levels(self):
+        levels = []
+        level_data = generate_level_data()
+        for data in level_data:
+            levels.append({
+                "level_number": data["level_number"],
+                "required_score": data["required_score"],
+                "obstacles": data["obstacles"],
+                "unlocked": data["level_number"] == 1
+            })
+        return levels
+
+    def start_level(self, level_number):
+        if not self.levels[level_number - 1]["unlocked"]:
+            print(f"Level {level_number} is locked!")
+            return False
+
+        print(f"Starting Level {level_number}")
+        level_data = self.levels[level_number - 1]
+        grid = Grid(obstacles=level_data["obstacles"], mode="adventure")
+        required_score = level_data["required_score"]
+
+        # Игровой процесс Adventure уровня
+        shapes = [Shape(random.choice(SHAPES)) for _ in range(3)]
+        positions = [(600, 100), (600, 250), (600, 400)]
+        random.shuffle(positions)
+        for i, shape in enumerate(shapes):
+            shape.rect.topleft = positions[i]
+
+        dragging_shape = None
+        offset_x, offset_y = 0, 0
+        clock = pygame.time.Clock()
+
+        while True:
+            clock.tick(FPS)
+            draw_gradient_background(screen, DARK_BLUE, LIGHT_BLUE)
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    grid.save_to_database()
+                    pygame.quit()
+                    sys.exit()
+
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    for shape in shapes:
+                        if shape.rect.collidepoint(event.pos):
+                            dragging_shape = shape
+                            offset_x = shape.rect.x - event.pos[0]
+                            offset_y = shape.rect.y - event.pos[1]
+                            break
+
+                elif event.type == pygame.MOUSEBUTTONUP:
+                    if dragging_shape:
+                        grid_x = (dragging_shape.rect.x - 100 + CELL_SIZE // 2) // CELL_SIZE
+                        grid_y = (dragging_shape.rect.y - 100 + CELL_SIZE // 2) // CELL_SIZE
+
+                        if grid.can_place(dragging_shape.shape, grid_x, grid_y):
+                            grid.place(dragging_shape.shape, grid_x, grid_y)
+                            shapes.remove(dragging_shape)
+                            if not shapes:
+                                shapes = [Shape(random.choice(SHAPES)) for _ in range(3)]
+                                random.shuffle(positions)
+                                for i, shape in enumerate(shapes):
+                                    shape.rect.topleft = positions[i]
+                        else:
+                            index = positions.index(dragging_shape.rect.topleft)
+                            dragging_shape.rect.topleft = positions[index]
+
+                        dragging_shape = None
+
+                elif event.type == pygame.MOUSEMOTION and dragging_shape:
+                    dragging_shape.rect.x = event.pos[0] + offset_x
+                    dragging_shape.rect.y = event.pos[1] + offset_y
+
+            grid.draw()
+            for shape in shapes:
+                shape.draw(screen)
+
+            pygame.display.flip()
+
+            if grid.score >= required_score:
+                print(f"Level {level_number} completed!")
+                self.unlock_next_level(level_number)
+                return True
+
+            if not grid.has_moves(shapes):
+                print("No moves left! Restarting level...")
+                grid.reset()
+
+    def unlock_next_level(self, level_number):
+        next_level = level_number + 1
+        if next_level <= len(self.levels):
+            self.levels[next_level - 1]["unlocked"] = True
+
 
 SHAPES = [
     [[1, 1], [1, 1]],  # Квадрат
@@ -269,7 +415,6 @@ def play_classic():
     clock = pygame.time.Clock()
     grid = Grid()
 
-    # Инициализация фигур
     shapes = [Shape(random.choice(SHAPES)) for _ in range(3)]
     positions = [(600, 95), (600, 250), (600, 405)]
     random.shuffle(positions)
@@ -341,10 +486,11 @@ def play_classic():
 
 def main():
     clock = pygame.time.Clock()
+    adventure = Adventure()
 
     while True:
         clock.tick(FPS)
-        draw_gradient_background(screen, DARK_BLUE, LIGHT_BLUE)  # Градиентный фон
+        draw_gradient_background(screen, DARK_BLUE, LIGHT_BLUE)
 
         for snowflake in snowflakes:
             snowflake.fall()
@@ -367,7 +513,9 @@ def main():
             button.draw(screen, mouse_pos)
             if button.is_clicked(mouse_pos, mouse_pressed):
                 if button.text == "Adventure":
-                    print("Start Adventure mode")
+                    level_number = 1
+                    while adventure.start_level(level_number):
+                        level_number += 1
                 elif button.text == "Classic":
                     play_classic()
 
