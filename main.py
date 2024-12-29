@@ -109,6 +109,7 @@ buttons = [
     Button("Adventure", SCREEN_WIDTH // 2 - 150, 300, 300, 70, ORANGE, (255, 200, 100), icon=clock_icon),
     Button("Classic", SCREEN_WIDTH // 2 - 150, 400, 300, 70, GREEN, (100, 255, 200), icon=infinity_icon),
 ]
+back_to_menu_button = Button("Back", SCREEN_WIDTH - 200, 20, 180, 50, ORANGE, (255, 200, 100))
 
 
 class Snowflake:
@@ -143,7 +144,7 @@ def draw_gradient_background(screen, top_color, bottom_color):
 class Grid:
     def __init__(self, obstacles=None, mode="classic"):
         self.grid = [[0 for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
-        self.mode = mode  # Режим игры: classic или adventure
+        self.mode = mode
         if obstacles:
             for x, y in obstacles:
                 self.grid[y][x] = 1
@@ -240,12 +241,11 @@ class Grid:
         cursor.execute("SELECT current_score, high_score FROM scores")
         result = cursor.fetchone()
         if result is None:
-            # Если данных нет, создаём начальную запись
             cursor.execute("INSERT INTO scores (current_score, high_score) VALUES (0, 0)")
             conn.commit()
             result = (0, 0)
         conn.close()
-        return result  # Возвращаем текущий счёт и рекорд
+        return result
 
     def update_scores(self, reset=False):
         conn = sqlite3.connect(DB_NAME)
@@ -301,7 +301,6 @@ class Adventure:
         grid = Grid(obstacles=level_data["obstacles"], mode="adventure")
         required_score = level_data["required_score"]
 
-        # Игровой процесс Adventure уровня
         shapes = [Shape(random.choice(SHAPES)) for _ in range(3)]
         positions = [(600, 100), (600, 250), (600, 400)]
         random.shuffle(positions)
@@ -315,6 +314,7 @@ class Adventure:
         while True:
             clock.tick(FPS)
             draw_gradient_background(screen, DARK_BLUE, LIGHT_BLUE)
+            back_to_menu_button.draw(screen, pygame.mouse.get_pos())
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -323,6 +323,10 @@ class Adventure:
                     sys.exit()
 
                 elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if back_to_menu_button.is_clicked(pygame.mouse.get_pos(), pygame.mouse.get_pressed()[0]):
+                        grid.reset()
+                        return False
+
                     for shape in shapes:
                         if shape.rect.collidepoint(event.pos):
                             dragging_shape = shape
@@ -430,8 +434,11 @@ def play_classic():
     while running:
         clock.tick(FPS)
         draw_gradient_background(screen, DARK_BLUE, LIGHT_BLUE)
+        back_to_menu_button.draw(screen, pygame.mouse.get_pos())
 
         for event in pygame.event.get():
+            if back_to_menu_button.is_clicked(pygame.mouse.get_pos(), pygame.mouse.get_pressed()[0]):
+                return
             if event.type == pygame.QUIT:
                 grid.save_to_database()
                 pygame.quit()
