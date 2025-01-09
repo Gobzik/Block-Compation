@@ -12,6 +12,9 @@ GRID_SIZE = 8
 CELL_SIZE = 50
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Block Blast")
+sound_on = True
+dark_theme = False
+pygame.mouse.set_visible(False)
 DB_NAME = 'Save.sqlite'
 
 WHITE = (255, 255, 255)
@@ -100,6 +103,8 @@ class Button:
         return self.rect.collidepoint(mouse_pos) and mouse_pressed
 
 
+cursor_image = pygame.image.load("cursor.png")
+cursor_image = pygame.transform.scale(cursor_image, (32, 32))
 clock_icon = pygame.image.load("clock_icon.png")
 clock_icon = pygame.transform.scale(clock_icon, (40, 40))
 infinity_icon = pygame.image.load("infinity_icon.png")
@@ -108,6 +113,7 @@ infinity_icon = pygame.transform.scale(infinity_icon, (40, 40))
 buttons = [
     Button("Adventure", SCREEN_WIDTH // 2 - 150, 300, 300, 70, ORANGE, (255, 200, 100), icon=clock_icon),
     Button("Classic", SCREEN_WIDTH // 2 - 150, 400, 300, 70, GREEN, (100, 255, 200), icon=infinity_icon),
+    Button("Settings", SCREEN_WIDTH // 2 - 150, 500, 300, 70, BLUE, (100, 150, 255)),
 ]
 back_to_menu_button = Button("Back", SCREEN_WIDTH - 200, 20, 180, 50, ORANGE, (255, 200, 100))
 
@@ -190,11 +196,15 @@ class Grid:
             for c in range(GRID_SIZE):
                 self.grid[r][c] = 0
             self.score += 10 * GRID_SIZE
+            if sound_on:
+                pygame.mixer.Sound("line_clear.mp3").play()
 
         for c in full_cols:
             for r in range(GRID_SIZE):
                 self.grid[r][c] = 0
             self.score += 10 * GRID_SIZE
+            if sound_on:
+                pygame.mixer.Sound("line_clear.mp3").play()
 
         self.update_scores()
 
@@ -385,6 +395,17 @@ SHAPES = [
     [[1, 1, 0], [0, 1, 1]],  # Z-образная
     [[0, 1, 1], [1, 1, 0]],  # Обратная Z-образная
     [[1, 1, 1], [0, 1, 0]],  # T-образная
+    [[0, 1, 0], [1, 1, 1]], # T-образная
+    [[1], [1, 1], [1]],  # T-образная
+    [[0, 1], [1, 1], [0, 1]], # T-образная
+    [[1, 1, 1], [1, 1, 1], [1, 1, 1]], # Квадрат 3*3
+    [[1, 1, 1], [1, 1, 1]], # Прямоугольник горизонтальный
+    [[1, 1], [1, 1], [1, 1]], # Прямоугольник вертикальный
+    [[1]], # Везучий квадрат
+    [[1], [1, 1, 1]], # Крюк1
+    [[0, 0, 1], [1, 1, 1]], # Крюк2
+    [[1, 1, 1], [1]], # Крюк3
+    [[1, 1, 1], [0, 0, 1]], # Крюк4
 ]
 
 
@@ -415,6 +436,41 @@ class Shape:
                                      1)
 
 
+def show_no_moves_window(grid):
+    grid.reset()
+    retry_button = Button("Retry", SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2, 200, 50, ORANGE, (255, 200, 100))
+    menu_button = Button("Menu", SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2 + 70, 200, 50, GREEN, (100, 255, 200))
+    running = True
+
+    while running:
+        screen.fill(BLACK)
+        no_moves_text = font_large.render("No Moves Left!", True, WHITE)
+        screen.blit(no_moves_text, no_moves_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 100)))
+
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_pressed = pygame.mouse.get_pressed()[0]
+
+        retry_button.draw(screen, mouse_pos)
+        menu_button.draw(screen, mouse_pos)
+
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif mouse_pressed:
+                if retry_button.is_clicked(mouse_pos, mouse_pressed):
+                    return "retry"
+                elif menu_button.is_clicked(mouse_pos, mouse_pressed):
+                    return "menu"
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:
+                    return "retry"
+                elif event.key == pygame.K_m:
+                    return "menu"
+
+
 def play_classic():
     clock = pygame.time.Clock()
     grid = Grid()
@@ -433,7 +489,10 @@ def play_classic():
     running = True
     while running:
         clock.tick(FPS)
-        draw_gradient_background(screen, DARK_BLUE, LIGHT_BLUE)
+        if dark_theme:
+            screen.fill(DARK_BLUE if dark_theme else LIGHT_BLUE)
+        else:
+            draw_gradient_background(screen, DARK_BLUE, LIGHT_BLUE)
         back_to_menu_button.draw(screen, pygame.mouse.get_pos())
 
         for event in pygame.event.get():
@@ -468,11 +527,18 @@ def play_classic():
                                 shape.rect.topleft = positions[i]
 
                         if not grid.has_moves(shapes):
-                            grid.reset()
                             shapes = [Shape(random.choice(SHAPES)) for _ in range(3)]
                             random.shuffle(positions)
                             for i, shape in enumerate(shapes):
                                 shape.set_initial_position(positions[i])
+                                if sound_on:
+                                    pygame.mixer.Sound("game_over.mp3").play()
+                            action = show_no_moves_window(grid)
+                            if action == "retry":
+                                grid.reset()
+                                continue
+                            elif action == "menu":
+                                return "menu"
                     else:
                         dragging_shape.reset_to_initial_position()
 
@@ -488,16 +554,63 @@ def play_classic():
         for shape in shapes:
             shape.draw(screen)
 
+        mouse_pos = pygame.mouse.get_pos()
+        screen.blit(cursor_image, mouse_pos)
         pygame.display.flip()
+
+
+def open_settings_menu():
+    global dark_theme, sound_on
+    running = True
+    back_button = Button("Back", SCREEN_WIDTH - 250, SCREEN_HEIGHT - 100, 200, 50, ORANGE, (255, 200, 100))
+    sound_toggle_button = Button("Sound effects", SCREEN_WIDTH // 2 - 150, 300, 300, 70, BLUE, (100, 150, 255))
+    theme_toggle_button = Button("Change Theme", SCREEN_WIDTH // 2 - 150, 400, 300, 70, GREEN, (100, 255, 200))
+
+    while running:
+        screen.fill(DARK_BLUE if dark_theme else LIGHT_BLUE)
+
+        settings_text = font_large.render("Settings", True, WHITE)
+        screen.blit(settings_text, settings_text.get_rect(center=(SCREEN_WIDTH // 2, 100)))
+
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_pressed = pygame.mouse.get_pressed()[0]
+
+        back_button.draw(screen, mouse_pos)
+        sound_toggle_button.draw(screen, mouse_pos)
+        theme_toggle_button.draw(screen, mouse_pos)
+
+        screen.blit(cursor_image, mouse_pos)
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif mouse_pressed:
+                if back_button.is_clicked(mouse_pos, mouse_pressed):
+                    running = False
+                elif sound_toggle_button.is_clicked(mouse_pos, mouse_pressed):
+                    sound_on = not sound_on
+                    print(f"Sound {'On' if sound_on else 'Off'}")
+                elif theme_toggle_button.is_clicked(mouse_pos, mouse_pressed):
+                    dark_theme = not dark_theme
+                    print(f"Theme {'Dark' if dark_theme else 'Light'}")
 
 
 def main():
     clock = pygame.time.Clock()
     adventure = Adventure()
+    pygame.mixer.music.load("background_music.mp3")
+    pygame.mixer.music.set_volume(0.015)
+    pygame.mixer.music.play(-1)
+    screen.fill(DARK_BLUE if dark_theme else LIGHT_BLUE)
 
     while True:
         clock.tick(FPS)
-        draw_gradient_background(screen, DARK_BLUE, LIGHT_BLUE)
+        if dark_theme:
+            screen.fill(DARK_BLUE if dark_theme else LIGHT_BLUE)
+        else:
+            draw_gradient_background(screen, DARK_BLUE, LIGHT_BLUE)
 
         for snowflake in snowflakes:
             snowflake.fall()
@@ -525,7 +638,10 @@ def main():
                         level_number += 1
                 elif button.text == "Classic":
                     play_classic()
+                elif button.text == "Settings":
+                    open_settings_menu()
 
+        screen.blit(cursor_image, mouse_pos)
         pygame.display.flip()
 
 
