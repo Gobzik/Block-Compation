@@ -2,6 +2,7 @@ import sqlite3
 import pygame
 import sys
 import random
+import time
 
 pygame.init()
 
@@ -15,18 +16,21 @@ pygame.display.set_caption("Block Blast")
 sound_on = True
 dark_theme = False
 pygame.mouse.set_visible(False)
-DB_NAME = 'Save.sqlite'
+DB_NAME = 'data/Save.sqlite'
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 BLUE = (0, 123, 255)
+RED = (255, 0, 0)
 ORANGE = (255, 165, 0)
 GREEN = (0, 200, 150)
 DARK_BLUE = (10, 10, 80)
 LIGHT_BLUE = (173, 216, 230)
 GRAY = (200, 200, 200)
+DARK_GRAY = (80, 80, 70)
+PURPLE = (95, 70, 120)
 
-font_large = pygame.font.Font(None, 80)
+font_large = pygame.font.Font(None, 100)
 font_medium = pygame.font.Font(None, 50)
 font_small = pygame.font.Font(None, 30)
 
@@ -73,6 +77,17 @@ def initialize_database():
     )
     """)
 
+    # Таблица для сохранения фигур
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS pieces (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            shape TEXT NOT NULL,
+            x INTEGER NOT NULL,
+            y INTEGER NOT NULL,
+            mode TEXT NOT NULL
+        )
+        """)
+
     conn.commit()
     conn.close()
 
@@ -80,15 +95,31 @@ initialize_database()
 
 
 class Button:
-    def __init__(self, text, x, y, width, height, color, hover_color, icon=None):
+    def __init__(self, text, x, y, width, height, color, hover_color, animation_speed=1, icon=None):
         self.text = text
         self.rect = pygame.Rect(x, y, width, height)
+        self.base_rect = self.rect.copy()
         self.color = color
         self.hover_color = hover_color
         self.icon = icon
+        self.animation_speed = animation_speed
+        self.growth = 1.1
 
     def draw(self, screen, mouse_pos):
-        current_color = self.hover_color if self.rect.collidepoint(mouse_pos) else self.color
+        if self.rect.collidepoint(mouse_pos):
+            target_width = self.base_rect.width * self.growth
+            target_height = self.base_rect.height * self.growth
+            self.rect.width += int((target_width - self.rect.width) * self.animation_speed)
+            self.rect.height += int((target_height - self.rect.height) * self.animation_speed)
+
+            self.rect.center = self.base_rect.center
+            current_color = self.hover_color
+        else:
+            self.rect.width += int((self.base_rect.width - self.rect.width) * self.animation_speed)
+            self.rect.height += int((self.base_rect.height - self.rect.height) * self.animation_speed)
+            self.rect.center = self.base_rect.center
+            current_color = self.color
+
         pygame.draw.rect(screen, current_color, self.rect, border_radius=15)
 
         if self.icon:
@@ -103,17 +134,19 @@ class Button:
         return self.rect.collidepoint(mouse_pos) and mouse_pressed
 
 
-cursor_image = pygame.image.load("cursor.png")
+cursor_image = pygame.image.load("data/cursor.png")
 cursor_image = pygame.transform.scale(cursor_image, (32, 32))
-clock_icon = pygame.image.load("clock_icon.png")
+clock_icon = pygame.image.load("data/clock_icon.png")
 clock_icon = pygame.transform.scale(clock_icon, (40, 40))
-infinity_icon = pygame.image.load("infinity_icon.png")
+infinity_icon = pygame.image.load("data/infinity_icon.png")
 infinity_icon = pygame.transform.scale(infinity_icon, (40, 40))
+settings_icon = pygame.image.load("data/settings_icon.png")
+settings_icon = pygame.transform.scale(settings_icon, (40, 40))
 
 buttons = [
     Button("Adventure", SCREEN_WIDTH // 2 - 150, 300, 300, 70, ORANGE, (255, 200, 100), icon=clock_icon),
     Button("Classic", SCREEN_WIDTH // 2 - 150, 400, 300, 70, GREEN, (100, 255, 200), icon=infinity_icon),
-    Button("Settings", SCREEN_WIDTH // 2 - 150, 500, 300, 70, BLUE, (100, 150, 255)),
+    Button("Settings", SCREEN_WIDTH // 2 - 150, 500, 300, 70, BLUE, (100, 150, 255), icon=settings_icon),
 ]
 back_to_menu_button = Button("Back", SCREEN_WIDTH - 200, 20, 180, 50, ORANGE, (255, 200, 100))
 
@@ -136,6 +169,29 @@ class Snowflake:
 
 
 snowflakes = [Snowflake() for _ in range(150)]
+
+
+def draw_rainbow_text(text, font, x, y, base_color, screen):
+    rainbow_colors = [
+        (255, 0, 0),
+        (255, 127, 0),
+        (255, 255, 0),
+        (0, 255, 0),
+        (0, 255, 255),
+        (0, 0, 255),
+        (139, 0, 255)
+    ]
+
+    elapsed_time = time.time()
+    letter_spacing = 5
+    x_offset = x
+
+    for i, char in enumerate(text):
+        color_index = int((elapsed_time * 2 + i * letter_spacing) % len(rainbow_colors))
+        letter_color = rainbow_colors[color_index]
+        letter_surface = font.render(char, True, letter_color)
+        screen.blit(letter_surface, (x_offset, y))
+        x_offset += letter_surface.get_width()
 
 
 def draw_gradient_background(screen, top_color, bottom_color):
@@ -197,19 +253,18 @@ class Grid:
                 self.grid[r][c] = 0
             self.score += 10 * GRID_SIZE
             if sound_on:
-                pygame.mixer.Sound("line_clear.mp3").play()
+                pygame.mixer.Sound("data/line_clear.mp3").play()
 
         for c in full_cols:
             for r in range(GRID_SIZE):
                 self.grid[r][c] = 0
             self.score += 10 * GRID_SIZE
             if sound_on:
-                pygame.mixer.Sound("line_clear.mp3").play()
+                pygame.mixer.Sound("data/line_clear.mp3").play()
 
         self.update_scores()
 
     def save_to_database(self):
-        """Сохраняет текущее состояние сетки в базу данных."""
         table_name = f"{self.mode}_grid"
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
@@ -221,7 +276,6 @@ class Grid:
         conn.close()
 
     def load_from_database(self):
-        """Загружает состояние сетки из базы данных."""
         table_name = f"{self.mode}_grid"
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
@@ -266,6 +320,56 @@ class Grid:
         if self.score > self.high_score:
             self.high_score = self.score
             cursor.execute("UPDATE scores SET high_score = ?", (self.high_score,))
+        conn.commit()
+        conn.close()
+
+    def save_piece(self, shape, x, y, mode):
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+
+        shape_str = str(shape)
+
+        cursor.execute("""
+        INSERT INTO pieces (shape, x, y, mode) VALUES (?, ?, ?, ?)
+        """, (shape_str, x, y, mode))
+
+        conn.commit()
+        conn.close()
+
+    def load_pieces(self, mode):
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+        SELECT shape, x, y FROM pieces WHERE mode = ?
+        """, (mode,))
+        rows = cursor.fetchall()
+        conn.close()
+
+        loaded_shapes = []
+        for row in rows:
+            shape_data = eval(row[0])
+            x, y = row[1], row[2]
+            loaded_shapes.append((Shape(shape_data), (x, y)))
+
+        return loaded_shapes
+
+    def remove_piece(self, shape, x, y, mode):
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+
+        shape_str = str(shape)
+
+        cursor.execute("""
+        DELETE FROM pieces
+        WHERE rowid IN (
+            SELECT rowid
+            FROM pieces
+            WHERE shape = ? AND x = ? AND y = ? AND mode = ?
+            LIMIT 1
+        )
+        """, (shape_str, x, y, mode))
+
         conn.commit()
         conn.close()
 
@@ -416,6 +520,8 @@ class Shape:
         self.height = len(shape) * CELL_SIZE
         self.rect = pygame.Rect(0, 0, self.width, self.height)
         self.initial_position = None
+        colors = [GREEN, RED, BLUE, PURPLE]
+        self.time_color = (colors[(random.randint(0, 3))])
 
     def set_initial_position(self, position):
         self.initial_position = position
@@ -429,7 +535,7 @@ class Shape:
         for r, row in enumerate(self.shape):
             for c, cell in enumerate(row):
                 if cell:
-                    pygame.draw.rect(screen, ORANGE,
+                    pygame.draw.rect(screen, self.time_color,
                                      (self.rect.x + c * CELL_SIZE, self.rect.y + r * CELL_SIZE, CELL_SIZE, CELL_SIZE))
                     pygame.draw.rect(screen, WHITE,
                                      (self.rect.x + c * CELL_SIZE, self.rect.y + r * CELL_SIZE, CELL_SIZE, CELL_SIZE),
@@ -453,6 +559,9 @@ def show_no_moves_window(grid):
         retry_button.draw(screen, mouse_pos)
         menu_button.draw(screen, mouse_pos)
 
+        mouse_pos = pygame.mouse.get_pos()
+        screen.blit(cursor_image, mouse_pos)
+
         pygame.display.flip()
 
         for event in pygame.event.get():
@@ -475,12 +584,20 @@ def play_classic():
     clock = pygame.time.Clock()
     grid = Grid()
 
-    shapes = [Shape(random.choice(SHAPES)) for _ in range(3)]
-    positions = [(600, 95), (600, 250), (600, 405)]
-    random.shuffle(positions)
-    for i, shape in enumerate(shapes):
-        shape.rect.topleft = positions[i]
-        shape.set_initial_position(positions[i])
+    loaded_shapes = grid.load_pieces("classic")
+    if loaded_shapes:
+        shapes = [shape for shape, _ in loaded_shapes]  # Загружаем фигуры
+        positions = [pos for _, pos in loaded_shapes]  # Загружаем их позиции
+        for i, shape in enumerate(shapes):
+            shape.rect.topleft = positions[i]
+    else:
+        shapes = [Shape(random.choice(SHAPES)) for _ in range(3)]
+        positions = [(600, 95), (600, 250), (600, 405)]
+        random.shuffle(positions)
+        for i, shape in enumerate(shapes):
+            shape.rect.topleft = positions[i]
+            shape.set_initial_position(positions[i])
+            grid.save_piece(shape.shape, positions[i][0], positions[i][1], "classic")
 
     dragging_shape = None
     offset_x = 0
@@ -518,6 +635,7 @@ def play_classic():
 
                     if grid.can_place(dragging_shape.shape, grid_x, grid_y):
                         grid.place(dragging_shape.shape, grid_x, grid_y)
+                        grid.remove_piece(dragging_shape.shape, dragging_shape.rect.x, dragging_shape.rect.y, "classic")
                         shapes.remove(dragging_shape)
 
                         if not shapes:
@@ -532,7 +650,7 @@ def play_classic():
                             for i, shape in enumerate(shapes):
                                 shape.set_initial_position(positions[i])
                                 if sound_on:
-                                    pygame.mixer.Sound("game_over.mp3").play()
+                                    pygame.mixer.Sound("data/game_over.mp3").play()
                             action = show_no_moves_window(grid)
                             if action == "retry":
                                 grid.reset()
@@ -563,20 +681,25 @@ def open_settings_menu():
     global dark_theme, sound_on
     running = True
     back_button = Button("Back", SCREEN_WIDTH - 250, SCREEN_HEIGHT - 100, 200, 50, ORANGE, (255, 200, 100))
-    sound_toggle_button = Button("Sound effects", SCREEN_WIDTH // 2 - 150, 300, 300, 70, BLUE, (100, 150, 255))
+    sound_button = Button(
+        "Sound: ON",
+        SCREEN_WIDTH // 2 - 150, 300, 300, 70, BLUE, (100, 150, 255)
+    )
     theme_toggle_button = Button("Change Theme", SCREEN_WIDTH // 2 - 150, 400, 300, 70, GREEN, (100, 255, 200))
 
     while running:
         screen.fill(DARK_BLUE if dark_theme else LIGHT_BLUE)
 
-        settings_text = font_large.render("Settings", True, WHITE)
+        settings_text = font_large.render("Settings", True, DARK_GRAY)
         screen.blit(settings_text, settings_text.get_rect(center=(SCREEN_WIDTH // 2, 100)))
 
         mouse_pos = pygame.mouse.get_pos()
         mouse_pressed = pygame.mouse.get_pressed()[0]
 
+        sound_button.text = f"Sound ef: {'ON' if sound_on else 'OFF'}"
+
         back_button.draw(screen, mouse_pos)
-        sound_toggle_button.draw(screen, mouse_pos)
+        sound_button.draw(screen, mouse_pos)
         theme_toggle_button.draw(screen, mouse_pos)
 
         screen.blit(cursor_image, mouse_pos)
@@ -589,7 +712,7 @@ def open_settings_menu():
             elif mouse_pressed:
                 if back_button.is_clicked(mouse_pos, mouse_pressed):
                     running = False
-                elif sound_toggle_button.is_clicked(mouse_pos, mouse_pressed):
+                elif sound_button.is_clicked(mouse_pos, mouse_pressed):
                     sound_on = not sound_on
                     print(f"Sound {'On' if sound_on else 'Off'}")
                 elif theme_toggle_button.is_clicked(mouse_pos, mouse_pressed):
@@ -600,7 +723,7 @@ def open_settings_menu():
 def main():
     clock = pygame.time.Clock()
     adventure = Adventure()
-    pygame.mixer.music.load("background_music.mp3")
+    pygame.mixer.music.load("data/background_music.mp3")
     pygame.mixer.music.set_volume(0.015)
     pygame.mixer.music.play(-1)
     screen.fill(DARK_BLUE if dark_theme else LIGHT_BLUE)
@@ -616,9 +739,8 @@ def main():
             snowflake.fall()
             snowflake.draw(screen)
 
-        title_surface = font_large.render("BLOCK BLAST", True, WHITE)
+        draw_rainbow_text("Block Blast", font_large, SCREEN_WIDTH // 2 - 200, 100, WHITE, screen)
         subtitle_surface = font_small.render("ADVENTURE MASTER", True, WHITE)
-        screen.blit(title_surface, title_surface.get_rect(center=(SCREEN_WIDTH // 2, 150)))
         screen.blit(subtitle_surface, subtitle_surface.get_rect(center=(SCREEN_WIDTH // 2, 200)))
 
         mouse_pos = pygame.mouse.get_pos()
