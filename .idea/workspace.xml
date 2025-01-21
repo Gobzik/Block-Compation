@@ -4,8 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="61dfeb61-f9e4-492d-a9b1-439a4cd69255" name="Changes" comment="5 Settings (start), &#10;(small updates)">
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
+    <list default="true" id="61dfeb61-f9e4-492d-a9b1-439a4cd69255" name="Changes" comment="5.1 small updates">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -66,6 +66,7 @@
 }</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\oxram\PycharmProjects\Block_Blast\data" />
       <recent name="C:\Users\oxram\PycharmProjects\Block_Blast" />
     </key>
   </component>
@@ -165,7 +166,15 @@
       <option name="project" value="LOCAL" />
       <updated>1736453568128</updated>
     </task>
-    <option name="localTasksCounter" value="8" />
+    <task id="LOCAL-00008" summary="5.1 small updates">
+      <option name="closed" value="true" />
+      <created>1737123912849</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1737123912850</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -186,6 +195,7 @@
     <MESSAGE value="Forth. Adventure mode (start)" />
     <MESSAGE value="4.1 Back Button" />
     <MESSAGE value="5 Settings (start), &#10;(small updates)" />
-    <option name="LAST_COMMIT_MESSAGE" value="5 Settings (start), &#10;(small updates)" />
+    <MESSAGE value="5.1 small updates" />
+    <option name="LAST_COMMIT_MESSAGE" value="5.1 small updates" />
   </component>
 </project>
