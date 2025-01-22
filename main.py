@@ -3,6 +3,7 @@ import pygame
 import sys
 import random
 import time
+import os
 
 pygame.init()
 
@@ -12,7 +13,7 @@ FPS = 60
 GRID_SIZE = 8
 CELL_SIZE = 50
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-pygame.display.set_caption("Block Blast")
+pygame.display.set_caption("Cube Cascade")
 sound_on = True
 dark_theme = False
 pygame.mouse.set_visible(False)
@@ -144,9 +145,9 @@ settings_icon = pygame.image.load("data/settings_icon.png")
 settings_icon = pygame.transform.scale(settings_icon, (40, 40))
 
 buttons = [
-    Button("Adventure", SCREEN_WIDTH // 2 - 150, 300, 300, 70, ORANGE, (255, 200, 100), icon=clock_icon),
-    Button("Classic", SCREEN_WIDTH // 2 - 150, 400, 300, 70, GREEN, (100, 255, 200), icon=infinity_icon),
-    Button("Settings", SCREEN_WIDTH // 2 - 150, 500, 300, 70, BLUE, (100, 150, 255), icon=settings_icon),
+    Button("Adventure", SCREEN_WIDTH // 2 - 150, 200, 300, 70, ORANGE, (255, 200, 100), icon=clock_icon),
+    Button("Classic", SCREEN_WIDTH // 2 - 150, 300, 300, 70, GREEN, (100, 255, 200), icon=infinity_icon),
+    Button("Settings", SCREEN_WIDTH // 2 - 150, 400, 300, 70, BLUE, (100, 150, 255), icon=settings_icon),
 ]
 back_to_menu_button = Button("Back", SCREEN_WIDTH - 200, 20, 180, 50, ORANGE, (255, 200, 100))
 
@@ -586,8 +587,8 @@ def play_classic():
 
     loaded_shapes = grid.load_pieces("classic")
     if loaded_shapes:
-        shapes = [shape for shape, _ in loaded_shapes]  # Загружаем фигуры
-        positions = [pos for _, pos in loaded_shapes]  # Загружаем их позиции
+        shapes = [shape for shape, _ in loaded_shapes]
+        positions = [pos for _, pos in loaded_shapes]
         for i, shape in enumerate(shapes):
             shape.rect.topleft = positions[i]
     else:
@@ -677,6 +678,13 @@ def play_classic():
         pygame.display.flip()
 
 
+def toggle_music():
+    if pygame.mixer.music.get_busy():
+        pygame.mixer.music.pause()
+    else:
+        pygame.mixer.music.unpause()
+
+
 def open_settings_menu():
     global dark_theme, sound_on
     running = True
@@ -714,10 +722,41 @@ def open_settings_menu():
                     running = False
                 elif sound_button.is_clicked(mouse_pos, mouse_pressed):
                     sound_on = not sound_on
+                    toggle_music()
                     print(f"Sound {'On' if sound_on else 'Off'}")
                 elif theme_toggle_button.is_clicked(mouse_pos, mouse_pressed):
                     dark_theme = not dark_theme
                     print(f"Theme {'Dark' if dark_theme else 'Light'}")
+
+
+def is_first_run():
+    if not os.path.exists("data/first_run.txt"):
+        with open("data/first_run.txt", "w") as f:
+            f.write("Game had been started before.")
+        return True
+    return False
+
+
+def show_tutorial():
+    running = True
+    while running:
+        screen.fill((30, 30, 30))
+        tutorial_text = font_medium.render("Welcome to Block Blast!", True, WHITE)
+        instruction_text = font_small.render("Drag and drop blocks to the grid to score points.", True, WHITE)
+        continue_text = font_small.render("Press any key to continue...", True, WHITE)
+
+        screen.blit(tutorial_text, tutorial_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50)))
+        screen.blit(instruction_text, instruction_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)))
+        screen.blit(continue_text, continue_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50)))
+
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                running = False
 
 
 def main():
@@ -727,6 +766,9 @@ def main():
     pygame.mixer.music.set_volume(0.015)
     pygame.mixer.music.play(-1)
     screen.fill(DARK_BLUE if dark_theme else LIGHT_BLUE)
+
+    if is_first_run():
+        show_tutorial()
 
     while True:
         clock.tick(FPS)
@@ -739,9 +781,7 @@ def main():
             snowflake.fall()
             snowflake.draw(screen)
 
-        draw_rainbow_text("Block Blast", font_large, SCREEN_WIDTH // 2 - 200, 100, WHITE, screen)
-        subtitle_surface = font_small.render("ADVENTURE MASTER", True, WHITE)
-        screen.blit(subtitle_surface, subtitle_surface.get_rect(center=(SCREEN_WIDTH // 2, 200)))
+        draw_rainbow_text("Cube Cascade", font_large, SCREEN_WIDTH // 2 - 243, 100, WHITE, screen)
 
         mouse_pos = pygame.mouse.get_pos()
         mouse_pressed = pygame.mouse.get_pressed()[0]
