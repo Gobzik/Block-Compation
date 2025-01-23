@@ -12,6 +12,8 @@ SCREEN_HEIGHT = 600
 FPS = 60
 GRID_SIZE = 8
 CELL_SIZE = 50
+icon_image = pygame.image.load("data/icon.jpg")
+pygame.display.set_icon(icon_image)
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Cube Cascade")
 sound_on = True
@@ -143,6 +145,8 @@ infinity_icon = pygame.image.load("data/infinity_icon.png")
 infinity_icon = pygame.transform.scale(infinity_icon, (40, 40))
 settings_icon = pygame.image.load("data/settings_icon.png")
 settings_icon = pygame.transform.scale(settings_icon, (40, 40))
+crown_image = pygame.image.load("data/crown.png")
+crown_image = pygame.transform.scale(crown_image, (40, 40))
 
 buttons = [
     Button("Adventure", SCREEN_WIDTH // 2 - 150, 200, 300, 70, ORANGE, (255, 200, 100), icon=clock_icon),
@@ -204,6 +208,30 @@ def draw_gradient_background(screen, top_color, bottom_color):
         pygame.draw.line(screen, color, (0, y), (SCREEN_WIDTH, y))
 
 
+class BackgroundCube:
+    def __init__(self):
+        self.x = random.randint(0, SCREEN_WIDTH)
+        self.y = random.randint(0, SCREEN_HEIGHT)
+        self.size = random.randint(5, 15)
+        self.speed = random.uniform(0.2, 0.7)
+        self.color = random.choice([(255, 255, 255), (200, 200, 200), (150, 150, 150)])
+
+    def move(self):
+        self.y += self.speed
+        if self.y > SCREEN_HEIGHT:
+            self.y = -self.size
+            self.x = random.randint(0, SCREEN_WIDTH)
+
+    def draw(self, screen):
+        surface = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+        surface.fill((*self.color, 50))
+        screen.blit(surface, (self.x, self.y))
+
+
+
+background_cubes = [BackgroundCube() for _ in range(75)]
+
+
 class Grid:
     def __init__(self, obstacles=None, mode="classic"):
         self.grid = [[0 for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
@@ -222,10 +250,13 @@ class Grid:
                 pygame.draw.rect(screen, color, rect)
                 pygame.draw.rect(screen, WHITE, rect, 1)
 
-        score_surface = font_medium.render(f"Score: {self.score}", True, WHITE)
-        high_score_surface = font_medium.render(f"High Score: {self.high_score}", True, WHITE)
-        screen.blit(score_surface, (10, 10))
-        screen.blit(high_score_surface, (10, 50))
+        high_score_text = font_medium.render(f"{self.high_score}", True, RED)
+        screen.blit(crown_image, (10, 5))
+        screen.blit(high_score_text, (50, 10))
+
+        current_score_text = font_medium.render(f"{self.score}", True, ORANGE)
+        text_rect = current_score_text.get_rect(center=(SCREEN_WIDTH // 2 - 100, 85))
+        screen.blit(current_score_text, text_rect)
 
     def can_place(self, shape, x, y):
         for r, row in enumerate(shape):
@@ -613,6 +644,10 @@ def play_classic():
             draw_gradient_background(screen, DARK_BLUE, LIGHT_BLUE)
         back_to_menu_button.draw(screen, pygame.mouse.get_pos())
 
+        for cube in background_cubes:
+            cube.move()
+            cube.draw(screen)
+
         for event in pygame.event.get():
             if back_to_menu_button.is_clicked(pygame.mouse.get_pos(), pygame.mouse.get_pressed()[0]):
                 return
@@ -780,6 +815,9 @@ def main():
         for snowflake in snowflakes:
             snowflake.fall()
             snowflake.draw(screen)
+        for cube in background_cubes:
+            cube.move()
+            cube.draw(screen)
 
         draw_rainbow_text("Cube Cascade", font_large, SCREEN_WIDTH // 2 - 243, 100, WHITE, screen)
 

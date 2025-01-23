@@ -4,8 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="61dfeb61-f9e4-492d-a9b1-439a4cd69255" name="Changes" comment="5.1 small updates">
-      <change beforePath="$PROJECT_DIR$/.idea/Block_Blast.iml" beforeDir="false" />
+    <list default="true" id="61dfeb61-f9e4-492d-a9b1-439a4cd69255" name="Changes" comment="5.2 Sound fix. Hello menu.">
+      <change afterPath="$PROJECT_DIR$/data/icon.jpg" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/data/Save.sqlite" beforeDir="false" afterPath="$PROJECT_DIR$/data/Save.sqlite" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
@@ -185,7 +185,15 @@
       <option name="project" value="LOCAL" />
       <updated>1737466385431</updated>
     </task>
-    <option name="localTasksCounter" value="10" />
+    <task id="LOCAL-00010" summary="5.2 Sound fix. Hello menu.">
+      <option name="closed" value="true" />
+      <created>1737569549168</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1737569549168</updated>
+    </task>
+    <option name="localTasksCounter" value="11" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -207,6 +215,7 @@
     <MESSAGE value="4.1 Back Button" />
     <MESSAGE value="5 Settings (start), &#10;(small updates)" />
     <MESSAGE value="5.1 small updates" />
-    <option name="LAST_COMMIT_MESSAGE" value="5.1 small updates" />
+    <MESSAGE value="5.2 Sound fix. Hello menu." />
+    <option name="LAST_COMMIT_MESSAGE" value="5.2 Sound fix. Hello menu." />
   </component>
 </project>
